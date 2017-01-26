@@ -2443,12 +2443,7 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
   lpc43_pin_config(PINCONF_SD_CD_1);
   lpc43_pin_config(PINCONF_SD_CMD_1);
 
-  //lpc43_pin_config(CLKCONF_SD_CLK_2);
-  regval  = getreg32(LPC43_SCU_SFSCLK2);
-  regval |= (2 << 3);   /* Disable pull-down and pull-up resistor */
-  regval |= (1 << 6);   /* Enable Input buffer */
-  regval |= (4);        /* Selects pin function 4 */
-  putreg32(regval, LPC43_SCU_SFSCLK2);
+  lpc43_pin_config(CLKCONF_SD_CLK_2);
 
   /* Reset the card and assure that it is in the initial, unconfigured
    * state.
