@@ -1,7 +1,7 @@
 /****************************************************************************
- * sched/module/mod_read.c
+ * libc/modlib/modlib_read.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,8 +48,7 @@
 #include <errno.h>
 
 #include <nuttx/module.h>
-
-#include "module.h"
+#include <nuttx/lib/modlib.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -58,19 +57,15 @@
 #undef ELF_DUMP_READDATA       /* Define to dump all file data read */
 
 /****************************************************************************
- * Private Constant Data
- ****************************************************************************/
-
-/****************************************************************************
  * Private Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mod_dumpreaddata
+ * Name: modlib_dumpreaddata
  ****************************************************************************/
 
 #if defined(ELF_DUMP_READDATA)
-static inline void mod_dumpreaddata(FAR char *buffer, int buflen)
+static inline void modlib_dumpreaddata(FAR char *buffer, int buflen)
 {
   FAR uint32_t *buf32 = (FAR uint32_t *)buffer;
   int i;
@@ -88,7 +83,7 @@ static inline void mod_dumpreaddata(FAR char *buffer, int buflen)
     }
 }
 #else
-#  define mod_dumpreaddata(b,n)
+#  define modlib_dumpreaddata(b,n)
 #endif
 
 /****************************************************************************
@@ -96,7 +91,7 @@ static inline void mod_dumpreaddata(FAR char *buffer, int buflen)
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mod_read
+ * Name: modlib_read
  *
  * Description:
  *   Read 'readsize' bytes from the object file at 'offset'.  The data is
@@ -108,8 +103,8 @@ static inline void mod_dumpreaddata(FAR char *buffer, int buflen)
  *
  ****************************************************************************/
 
-int mod_read(FAR struct mod_loadinfo_s *loadinfo, FAR uint8_t *buffer,
-             size_t readsize, off_t offset)
+int modlib_read(FAR struct mod_loadinfo_s *loadinfo, FAR uint8_t *buffer,
+                size_t readsize, off_t offset)
 {
   ssize_t nbytes;      /* Number of bytes read */
   off_t   rpos;        /* Position returned by lseek */
@@ -160,6 +155,6 @@ int mod_read(FAR struct mod_loadinfo_s *loadinfo, FAR uint8_t *buffer,
          }
     }
 
-  mod_dumpreaddata(buffer, readsize);
+  modlib_dumpreaddata(buffer, readsize);
   return OK;
 }

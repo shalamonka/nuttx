@@ -1,7 +1,7 @@
 /****************************************************************************
- * sched/module/mod_iobuffer.c
+ * libc/modlib/modlib_uninit.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015. 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,24 +39,27 @@
 
 #include <nuttx/config.h>
 
+#include <unistd.h>
 #include <debug.h>
 #include <errno.h>
 
 #include <nuttx/kmalloc.h>
 #include <nuttx/module.h>
+#include <nuttx/lib/modlib.h>
 
-#include "module.h"
+#include "libc.h"
+#include "modlib/modlib.h"
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mod_allocbuffer
+ * Name: modlib_uninitialize
  *
  * Description:
- *   Perform the initial allocation of the I/O buffer, if it has not already
- *   been allocated.
+ *   Releases any resources committed by modlib_initialize().  This
+ *   essentially undoes the actions of modlib_initialize.
  *
  * Returned Value:
  *   0 (OK) is returned on success and a negated errno is returned on
@@ -64,32 +67,27 @@
  *
  ****************************************************************************/
 
-int mod_allocbuffer(FAR struct mod_loadinfo_s *loadinfo)
+int modlib_uninitialize(struct mod_loadinfo_s *loadinfo)
 {
-  /* Has a buffer been allocated> */
+  /* Free all working buffers */
 
-  if (!loadinfo->iobuffer)
+  modlib_freebuffers(loadinfo);
+
+  /* Close the ELF file */
+
+  if (loadinfo->filfd >= 0)
     {
-      /* No.. allocate one now */
-
-      loadinfo->iobuffer = (FAR uint8_t *)kmm_malloc(CONFIG_MODULE_BUFFERSIZE);
-      if (!loadinfo->iobuffer)
-        {
-          serr("ERROR: Failed to allocate an I/O buffer\n");
-          return -ENOMEM;
-        }
-
-      loadinfo->buflen = CONFIG_MODULE_BUFFERSIZE;
+      close(loadinfo->filfd);
     }
 
   return OK;
 }
 
 /****************************************************************************
- * Name: mod_reallocbuffer
+ * Name: modlib_freebuffers
  *
  * Description:
- *   Increase the size of I/O buffer by the specified buffer increment.
+ *  Release all working buffers.
  *
  * Returned Value:
  *   0 (OK) is returned on success and a negated errno is returned on
@@ -97,28 +95,22 @@ int mod_allocbuffer(FAR struct mod_loadinfo_s *loadinfo)
  *
  ****************************************************************************/
 
-int mod_reallocbuffer(FAR struct mod_loadinfo_s *loadinfo, size_t increment)
+int modlib_freebuffers(struct mod_loadinfo_s *loadinfo)
 {
-  FAR void *buffer;
-  size_t newsize;
+  /* Release all working allocations  */
 
-  /* Get the new size of the allocation */
-
-  newsize = loadinfo->buflen + increment;
-
-  /* And perform the reallocation */
-
-   buffer = kmm_realloc((FAR void *)loadinfo->iobuffer, newsize);
-   if (!buffer)
+  if (loadinfo->shdr != NULL)
     {
-      serr("ERROR: Failed to reallocate the I/O buffer\n");
-      return -ENOMEM;
+      lib_free((FAR void *)loadinfo->shdr);
+      loadinfo->shdr      = NULL;
     }
 
-  /* Save the new buffer info */
+  if (loadinfo->iobuffer != NULL)
+    {
+      lib_free((FAR void *)loadinfo->iobuffer);
+      loadinfo->iobuffer  = NULL;
+      loadinfo->buflen    = 0;
+    }
 
-  loadinfo->iobuffer = buffer;
-  loadinfo->buflen   = newsize;
   return OK;
 }
-

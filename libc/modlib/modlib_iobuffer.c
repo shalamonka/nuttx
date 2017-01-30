@@ -1,7 +1,7 @@
 /****************************************************************************
- * sched/module/mod_verify.c
+ * libc/modlib/modlib_iobuffer.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,76 +39,86 @@
 
 #include <nuttx/config.h>
 
-#include <string.h>
 #include <debug.h>
 #include <errno.h>
 
 #include <nuttx/module.h>
+#include <nuttx/lib/modlib.h>
 
-/****************************************************************************
- * Private Constant Data
- ****************************************************************************/
-
-static const char g_modmagic[EI_MAGIC_SIZE] =
-{
-    0x7f, 'E', 'L', 'F'
-};
+#include "libc.h"
+#include "modlib/modlib.h"
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mod_verifyheader
+ * Name: modlib_allocbuffer
  *
  * Description:
- *   Given the header from a possible ELF executable, verify that it
- *   is an ELF executable.
+ *   Perform the initial allocation of the I/O buffer, if it has not already
+ *   been allocated.
  *
  * Returned Value:
  *   0 (OK) is returned on success and a negated errno is returned on
  *   failure.
  *
- *   -ENOEXEC  : Not an ELF file
- *   -EINVAL : Not a relocatable ELF file or not supported by the current,
- *               configured architecture.
+ ****************************************************************************/
+
+int modlib_allocbuffer(FAR struct mod_loadinfo_s *loadinfo)
+{
+  /* Has a buffer been allocated> */
+
+  if (!loadinfo->iobuffer)
+    {
+      /* No.. allocate one now */
+
+      loadinfo->iobuffer = (FAR uint8_t *)lib_malloc(CONFIG_MODLIB_BUFFERSIZE);
+      if (!loadinfo->iobuffer)
+        {
+          serr("ERROR: Failed to allocate an I/O buffer\n");
+          return -ENOMEM;
+        }
+
+      loadinfo->buflen = CONFIG_MODLIB_BUFFERSIZE;
+    }
+
+  return OK;
+}
+
+/****************************************************************************
+ * Name: modlib_reallocbuffer
+ *
+ * Description:
+ *   Increase the size of I/O buffer by the specified buffer increment.
+ *
+ * Returned Value:
+ *   0 (OK) is returned on success and a negated errno is returned on
+ *   failure.
  *
  ****************************************************************************/
 
-int mod_verifyheader(FAR const Elf32_Ehdr *ehdr)
+int modlib_reallocbuffer(FAR struct mod_loadinfo_s *loadinfo, size_t increment)
 {
-  if (!ehdr)
+  FAR void *buffer;
+  size_t newsize;
+
+  /* Get the new size of the allocation */
+
+  newsize = loadinfo->buflen + increment;
+
+  /* And perform the reallocation */
+
+   buffer = lib_realloc((FAR void *)loadinfo->iobuffer, newsize);
+   if (!buffer)
     {
-      serr("ERROR: NULL ELF header!");
-      return -ENOEXEC;
+      serr("ERROR: Failed to reallocate the I/O buffer\n");
+      return -ENOMEM;
     }
 
-  /* Verify that the magic number indicates an ELF file */
+  /* Save the new buffer info */
 
-  if (memcmp(ehdr->e_ident, g_modmagic, EI_MAGIC_SIZE) != 0)
-    {
-      sinfo("Not ELF magic {%02x, %02x, %02x, %02x}\n",
-            ehdr->e_ident[0], ehdr->e_ident[1], ehdr->e_ident[2], ehdr->e_ident[3]);
-      return -ENOEXEC;
-    }
-
-  /* Verify that this is a relocatable file */
-
-  if (ehdr->e_type != ET_REL)
-    {
-      serr("ERROR: Not a relocatable file: e_type=%d\n", ehdr->e_type);
-      return -EINVAL;
-    }
-
-  /* Verify that this file works with the currently configured architecture */
-
-  if (up_checkarch(ehdr))
-    {
-      serr("ERROR: Not a supported architecture\n");
-      return -ENOEXEC;
-    }
-
-  /* Looks good so far... we still might find some problems later. */
-
+  loadinfo->iobuffer = buffer;
+  loadinfo->buflen   = newsize;
   return OK;
 }

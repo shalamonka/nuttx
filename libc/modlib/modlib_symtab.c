@@ -1,7 +1,7 @@
 /****************************************************************************
- * sched/module/mod_symtab.c
+ * libc/modlib/modlib_symtab.c
  *
- *   Copyright (C) 2015 Gregory Nutt. All rights reserved.
+ *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,22 +43,21 @@
 
 #include <nuttx/symtab.h>
 #include <nuttx/module.h>
-
-#include "module.h"
+#include <nuttx/lib/modlib.h>
 
 /****************************************************************************
  * Public Data
  ****************************************************************************/
 
-FAR const struct symtab_s *g_mod_symtab;
-FAR int g_mod_nsymbols;
+FAR const struct symtab_s *g_modlib_symtab;
+FAR int g_modlib_nsymbols;
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mod_getsymtab
+ * Name: modlib_getsymtab
  *
  * Description:
  *   Get the current kernel symbol table selection as an atomic operation.
@@ -72,20 +71,20 @@ FAR int g_mod_nsymbols;
  *
  ****************************************************************************/
 
-void mod_getsymtab(FAR const struct symtab_s **symtab, FAR int *nsymbols)
+void modlib_getsymtab(FAR const struct symtab_s **symtab, FAR int *nsymbols)
 {
   DEBUGASSERT(symtab != NULL && nsymbols != NULL);
 
   /* Borrow the registry lock to assure atomic access */
 
-  mod_registry_lock();
-  *symtab   = g_mod_symtab;
-  *nsymbols = g_mod_nsymbols;
-  mod_registry_unlock();
+  modlib_registry_lock();
+  *symtab   = g_modlib_symtab;
+  *nsymbols = g_modlib_nsymbols;
+  modlib_registry_unlock();
 }
 
 /****************************************************************************
- * Name: mod_setsymtab
+ * Name: modlib_setsymtab
  *
  * Description:
  *   Select a new kernel symbol table selection as an atomic operation.
@@ -99,12 +98,12 @@ void mod_getsymtab(FAR const struct symtab_s **symtab, FAR int *nsymbols)
  *
  ****************************************************************************/
 
-void mod_setsymtab(FAR const struct symtab_s *symtab, int nsymbols)
+void modlib_setsymtab(FAR const struct symtab_s *symtab, int nsymbols)
 {
   /* Borrow the registry lock to assure atomic access */
 
-  mod_registry_lock();
-  g_mod_symtab   = symtab;
-  g_mod_nsymbols = nsymbols;
-  mod_registry_unlock();
+  modlib_registry_lock();
+  g_modlib_symtab   = symtab;
+  g_modlib_nsymbols = nsymbols;
+  modlib_registry_unlock();
 }

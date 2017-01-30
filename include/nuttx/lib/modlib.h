@@ -1,5 +1,5 @@
 /****************************************************************************
- * sched/module/module.h
+ * include/nuttx/lib/modlib.h
  *
  *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -33,8 +33,8 @@
  *
  ****************************************************************************/
 
-#ifndef __SCHED_MODULE_MODULE_H
-#define __SCHED_MODULE_MODULE_H
+#ifndef __INCLUDE_NUTTX_LIB_MODLIB_H
+#define __INCLUDE_NUTTX_LIB_MODLIB_H
 
 /****************************************************************************
  * Included Files
@@ -49,8 +49,111 @@
 #include <nuttx/module.h>
 
 /****************************************************************************
+ * Pre-processor Definitions
+ ****************************************************************************/
+/* Configuration ************************************************************/
+
+#ifndef CONFIG_MODLIB_ALIGN_LOG2
+#  define CONFIG_MODLIB_ALIGN_LOG2 2
+#endif
+
+#ifndef CONFIG_MODLIB_BUFFERSIZE
+#  define CONFIG_MODLIB_BUFFERSIZE 128
+#endif
+
+#ifndef CONFIG_MODLIB_BUFFERINCR
+#  define CONFIG_MODLIB_BUFFERINCR 32
+#endif
+
+/* CONFIG_DEBUG_INFO, and CONFIG_DEBUG_BINFMT have to be defined or
+ * CONFIG_MODLIB_DUMPBUFFER does nothing.
+ */
+
+#if !defined(CONFIG_DEBUG_INFO) || !defined (CONFIG_DEBUG_BINFMT)
+#  undef CONFIG_MODLIB_DUMPBUFFER
+#endif
+
+#ifdef CONFIG_MODLIB_DUMPBUFFER
+# define modlib_dumpbuffer(m,b,n) sinfodumpbuffer(m,b,n)
+#else
+# define modlib_dumpbuffer(m,b,n)
+#endif
+
+/* Module names.  These are only used by the kernel module and will be
+ * disabled in all other configurations.
+ *
+ * FLAT build:  There are only kernel modules and kernel modules
+ *   masquerading as shared libraries.  Names are required.
+ * PROTECTED and KERNEL builds:  Names are only needed in the kernel
+ *   portion of the build
+ */
+
+#if defined(CONFIG_BUILD_FLAT) || defined(__KERNEL__)
+#  define HAVE_MODLIB_NAMES
+#  define MODLIB_NAMEMAX 16
+#endif
+
+/****************************************************************************
  * Public Types
  ****************************************************************************/
+
+/* This is the type of the function that is called to uninitialize the
+ * the loaded module.  This may mean, for example, un-registering a device
+ * driver. If the module is successfully initialized, its memory will be
+ * deallocated.
+ *
+ * Input Parameters:
+ *   arg - An opaque argument that was previously returned by the initializer
+ *         function.
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on any failure to
+ *   initialize the module.  If zero is returned, then the module memory
+ *   will be deallocated.  If the module is still in use (for example with
+ *   open driver instances), the uninitialization function should fail with
+ *   -EBUSY
+ */
+
+typedef CODE int (*mod_uninitializer_t)(FAR void *arg);
+
+/* The contect of this structure is returned by module_initialize().
+ *
+ *   uninitializer - The pointer to the uninitialization function.  NULL may
+ *                   be returned if no uninitialization is needed (i.e, the
+ *                   the module memory can be deallocated at any time).
+ *   arg           - An argument that will be passed to the uninitialization
+                     function.
+ *   exports       - A symbol table exported by the module
+ *   nexports      - The number of symbols in the exported symbol table.
+ */
+
+struct mod_info_s
+{
+  mod_uninitializer_t uninitializer;   /* Module uninitializer */
+  FAR void *arg;                       /* Uninitializer argument */
+  FAR const struct symtab_s *exports;  /* Symbols exported by module */
+  unsigned int nexports;               /* Number of symobols in exports list */
+};
+
+/* A NuttX module is expected to export a function called module_initialize()
+ * that has the following function prototype.  This function should appear as
+ * the entry point in the ELF module file and will be called by the binfmt
+ * logic after the module has been loaded into kernel memory.
+ *
+ * Input Parameters:
+ *   modinfo - Module information returned by modlib_initialize().
+ *
+ * Returned Value:
+ *   Zero (OK) on success; a negated errno value on any failure to
+ *   initialize the module.
+ */
+
+typedef CODE int (*mod_initializer_t)(FAR struct mod_info_s *modinfo);
+
+/* This is the type of the callback function used by modlib_registry_foreach() */
+
+struct module_s;
+typedef CODE int (*mod_callback_t)(FAR struct module_s *modp, FAR void *arg);
 
 /* This describes the file to be loaded. */
 
@@ -58,7 +161,9 @@ struct symtab_s;
 struct module_s
 {
   FAR struct module_s *flink;          /* Supports a singly linked list */
-  FAR char modulename[MODULENAME_MAX]; /* Module name */
+#ifdef HAVE_MODLIB_NAMES
+  FAR char modname[MODLIB_NAMEMAX];    /* Module name */
+#endif
 #if defined(CONFIG_FS_PROCFS) && !defined(CONFIG_FS_PROCFS_EXCLUDE_MODULE)
   mod_initializer_t initializer;       /* Module initializer function */
 #endif
@@ -69,14 +174,14 @@ struct module_s
   size_t datasize;                     /* Size of the kernel .bss/.data memory allocation */
 #endif
 
-#if CONFIG_MODULE_MAXDEPEND > 0
+#if CONFIG_MODLIB_MAXDEPEND > 0
   uint8_t dependents;                  /* Number of modules that depend on this module */
 
   /* This is an upacked array of pointers to other modules that this module
    * depends upon.
    */
 
-  FAR struct module_s *dependencies[CONFIG_MODULE_MAXDEPEND];
+  FAR struct module_s *dependencies[CONFIG_MODLIB_MAXDEPEND];
 #endif
 };
 
@@ -112,15 +217,16 @@ struct mod_loadinfo_s
  * Public Data
  ****************************************************************************/
 
-FAR const struct symtab_s *g_mod_symtab;
-FAR int g_mod_nsymbols;
+struct symtab_s;
+FAR const struct symtab_s *g_modlib_symtab;
+FAR int g_modlib_nsymbols;
 
 /****************************************************************************
  * Public Function Prototypes
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mod_initialize
+ * Name: modlib_initialize
  *
  * Description:
  *   This function is called to configure the library to process an kernel
@@ -132,15 +238,15 @@ FAR int g_mod_nsymbols;
  *
  ****************************************************************************/
 
-int mod_initialize(FAR const char *filename,
-                   FAR struct mod_loadinfo_s *loadinfo);
+int modlib_initialize(FAR const char *filename,
+                      FAR struct mod_loadinfo_s *loadinfo);
 
 /****************************************************************************
- * Name: mod_uninitialize
+ * Name: modlib_uninitialize
  *
  * Description:
- *   Releases any resources committed by mod_init().  This essentially
- *   undoes the actions of mod_initialize.
+ *   Releases any resources committed by modlib_initialize().  This essentially
+ *   undoes the actions of modlib_initialize.
  *
  * Returned Value:
  *   0 (OK) is returned on success and a negated errno is returned on
@@ -148,10 +254,44 @@ int mod_initialize(FAR const char *filename,
  *
  ****************************************************************************/
 
-int mod_uninitialize(FAR struct mod_loadinfo_s *loadinfo);
+int modlib_uninitialize(FAR struct mod_loadinfo_s *loadinfo);
 
 /****************************************************************************
- * Name: mod_load
+ * Name: modlib_getsymtab
+ *
+ * Description:
+ *   Get the current symbol table selection as an atomic operation.
+ *
+ * Input Parameters:
+ *   symtab - The location to store the symbol table.
+ *   nsymbols - The location to store the number of symbols in the symbol table.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void modlib_getsymtab(FAR const struct symtab_s **symtab, FAR int *nsymbols);
+
+/****************************************************************************
+ * Name: modlib_setsymtab
+ *
+ * Description:
+ *   Select a new symbol table selection as an atomic operation.
+ *
+ * Input Parameters:
+ *   symtab - The new symbol table.
+ *   nsymbols - The number of symbols in the symbol table.
+ *
+ * Returned Value:
+ *   None
+ *
+ ****************************************************************************/
+
+void modlib_setsymtab(FAR const struct symtab_s *symtab, int nsymbols);
+
+/****************************************************************************
+ * Name: modlib_load
  *
  * Description:
  *   Loads the binary into memory, allocating memory, performing relocations
@@ -163,14 +303,14 @@ int mod_uninitialize(FAR struct mod_loadinfo_s *loadinfo);
  *
  ****************************************************************************/
 
-int mod_load(FAR struct mod_loadinfo_s *loadinfo);
+int modlib_load(FAR struct mod_loadinfo_s *loadinfo);
 
 /****************************************************************************
- * Name: mod_bind
+ * Name: modlib_bind
  *
  * Description:
  *   Bind the imported symbol names in the loaded module described by
- *   'loadinfo' using the exported symbol values provided by mod_setsymtab().
+ *   'loadinfo' using the exported symbol values provided by modlib_setsymtab().
  *
  * Returned Value:
  *   0 (OK) is returned on success and a negated errno is returned on
@@ -178,14 +318,14 @@ int mod_load(FAR struct mod_loadinfo_s *loadinfo);
  *
  ****************************************************************************/
 
-int mod_bind(FAR struct module_s *modp, FAR struct mod_loadinfo_s *loadinfo);
+int modlib_bind(FAR struct module_s *modp, FAR struct mod_loadinfo_s *loadinfo);
 
 /****************************************************************************
- * Name: mod_unload
+ * Name: modlib_unload
  *
  * Description:
  *   This function unloads the object from memory. This essentially undoes
- *   the actions of mod_load.  It is called only under certain error
+ *   the actions of modlib_load.  It is called only under certain error
  *   conditions after the module has been loaded but not yet started.
  *
  * Input Parameters:
@@ -198,10 +338,10 @@ int mod_bind(FAR struct module_s *modp, FAR struct mod_loadinfo_s *loadinfo);
  *
  ****************************************************************************/
 
-int mod_unload(struct mod_loadinfo_s *loadinfo);
+int modlib_unload(struct mod_loadinfo_s *loadinfo);
 
 /****************************************************************************
- * Name: mod_depend
+ * Name: modlib_depend
  *
  * Description:
  *   Set up module dependencies between the exporter and the importer of a
@@ -217,12 +357,12 @@ int mod_unload(struct mod_loadinfo_s *loadinfo);
  *
  ****************************************************************************/
 
-#if CONFIG_MODULE_MAXDEPEND > 0
-int mod_depend(FAR struct module_s *importer, FAR struct module_s *exporter);
+#if CONFIG_MODLIB_MAXDEPEND > 0
+int modlib_depend(FAR struct module_s *importer, FAR struct module_s *exporter);
 #endif
 
 /****************************************************************************
- * Name: mod_undepend
+ * Name: modlib_undepend
  *
  * Description:
  *   Tear down module dependencies between the exporters and the importer of
@@ -238,27 +378,12 @@ int mod_depend(FAR struct module_s *importer, FAR struct module_s *exporter);
  *
  ****************************************************************************/
 
-#if CONFIG_MODULE_MAXDEPEND > 0
-int mod_undepend(FAR struct module_s *importer);
+#if CONFIG_MODLIB_MAXDEPEND > 0
+int modlib_undepend(FAR struct module_s *importer);
 #endif
 
 /****************************************************************************
- * Name: mod_verifyheader
- *
- * Description:
- *   Given the header from a possible ELF executable, verify that it is
- *   an ELF executable.
- *
- * Returned Value:
- *   0 (OK) is returned on success and a negated errno is returned on
- *   failure.
- *
- ****************************************************************************/
-
-int mod_verifyheader(FAR const Elf32_Ehdr *header);
-
-/****************************************************************************
- * Name: mod_read
+ * Name: modlib_read
  *
  * Description:
  *   Read 'readsize' bytes from the object file at 'offset'.  The data is
@@ -270,148 +395,11 @@ int mod_verifyheader(FAR const Elf32_Ehdr *header);
  *
  ****************************************************************************/
 
-int mod_read(FAR struct mod_loadinfo_s *loadinfo, FAR uint8_t *buffer,
-             size_t readsize, off_t offset);
+int modlib_read(FAR struct mod_loadinfo_s *loadinfo, FAR uint8_t *buffer,
+                size_t readsize, off_t offset);
 
 /****************************************************************************
- * Name: mod_loadshdrs
- *
- * Description:
- *   Loads section headers into memory.
- *
- * Returned Value:
- *   0 (OK) is returned on success and a negated errno is returned on
- *   failure.
- *
- ****************************************************************************/
-
-int mod_loadshdrs(FAR struct mod_loadinfo_s *loadinfo);
-
-/****************************************************************************
- * Name: mod_findsection
- *
- * Description:
- *   A section by its name.
- *
- * Input Parameters:
- *   loadinfo - Load state information
- *   sectname - Name of the section to find
- *
- * Returned Value:
- *   On success, the index to the section is returned; A negated errno value
- *   is returned on failure.
- *
- ****************************************************************************/
-
-int mod_findsection(FAR struct mod_loadinfo_s *loadinfo,
-                    FAR const char *sectname);
-
-/****************************************************************************
- * Name: mod_findsymtab
- *
- * Description:
- *   Find the symbol table section.
- *
- * Returned Value:
- *   0 (OK) is returned on success and a negated errno is returned on
- *   failure.
- *
- ****************************************************************************/
-
-int mod_findsymtab(FAR struct mod_loadinfo_s *loadinfo);
-
-/****************************************************************************
- * Name: mod_readsym
- *
- * Description:
- *   Read the ELFT symbol structure at the specfied index into memory.
- *
- * Input Parameters:
- *   loadinfo - Load state information
- *   index    - Symbol table index
- *   sym      - Location to return the table entry
- *
- * Returned Value:
- *   0 (OK) is returned on success and a negated errno is returned on
- *   failure.
- *
- ****************************************************************************/
-
-int mod_readsym(FAR struct mod_loadinfo_s *loadinfo, int index,
-                FAR Elf32_Sym *sym);
-
-/****************************************************************************
- * Name: mod_symvalue
- *
- * Description:
- *   Get the value of a symbol.  The updated value of the symbol is returned
- *   in the st_value field of the symbol table entry.
- *
- * Input Parameters:
- *   modp     - Module state information
- *   loadinfo - Load state information
- *   sym      - Symbol table entry (value might be undefined)
- *
- * Returned Value:
- *   0 (OK) is returned on success and a negated errno is returned on
- *   failure.
- *
- *   EINVAL - There is something inconsistent in the symbol table (should only
- *            happen if the file is corrupted)
- *   ENOSYS - Symbol lies in common
- *   ESRCH  - Symbol has no name
- *   ENOENT - Symbol undefined and not provided via a symbol table
- *
- ****************************************************************************/
-
-int mod_symvalue(FAR struct module_s *modp,
-                 FAR struct mod_loadinfo_s *loadinfo, FAR Elf32_Sym *sym);
-
-/****************************************************************************
- * Name: mod_freebuffers
- *
- * Description:
- *  Release all working buffers.
- *
- * Returned Value:
- *   0 (OK) is returned on success and a negated errno is returned on
- *   failure.
- *
- ****************************************************************************/
-
-int mod_freebuffers(FAR struct mod_loadinfo_s *loadinfo);
-
-/****************************************************************************
- * Name: mod_allocbuffer
- *
- * Description:
- *   Perform the initial allocation of the I/O buffer, if it has not already
- *   been allocated.
- *
- * Returned Value:
- *   0 (OK) is returned on success and a negated errno is returned on
- *   failure.
- *
- ****************************************************************************/
-
-int mod_allocbuffer(FAR struct mod_loadinfo_s *loadinfo);
-
-/****************************************************************************
- * Name: mod_reallocbuffer
- *
- * Description:
- *   Increase the size of I/O buffer by the specified buffer increment.
- *
- * Returned Value:
- *   0 (OK) is returned on success and a negated errno is returned on
- *   failure.
- *
- ****************************************************************************/
-
-int mod_reallocbuffer(FAR struct mod_loadinfo_s *loadinfo, size_t increment);
-
-/****************************************************************************
- * Name: mod_registry_lock
+ * Name: modlib_registry_lock
  *
  * Description:
  *   Get exclusive access to the module registry.
@@ -424,10 +412,10 @@ int mod_reallocbuffer(FAR struct mod_loadinfo_s *loadinfo, size_t increment);
  *
  ****************************************************************************/
 
-void mod_registry_lock(void);
+void modlib_registry_lock(void);
 
 /****************************************************************************
- * Name: mod_registry_unlock
+ * Name: modlib_registry_unlock
  *
  * Description:
  *   Relinquish the lock on the module registry
@@ -440,10 +428,10 @@ void mod_registry_lock(void);
  *
  ****************************************************************************/
 
-void mod_registry_unlock(void);
+void modlib_registry_unlock(void);
 
 /****************************************************************************
- * Name: mod_registry_add
+ * Name: modlib_registry_add
  *
  * Description:
  *   Add a new entry to the module registry.
@@ -459,10 +447,10 @@ void mod_registry_unlock(void);
  *
  ****************************************************************************/
 
-void mod_registry_add(FAR struct module_s *modp);
+void modlib_registry_add(FAR struct module_s *modp);
 
 /****************************************************************************
- * Name: mod_registry_del
+ * Name: modlib_registry_del
  *
  * Description:
  *   Remove a module entry from the registry
@@ -479,16 +467,16 @@ void mod_registry_add(FAR struct module_s *modp);
  *
  ****************************************************************************/
 
-int mod_registry_del(FAR struct module_s *modp);
+int modlib_registry_del(FAR struct module_s *modp);
 
 /****************************************************************************
- * Name: mod_registry_find
+ * Name: modlib_registry_find
  *
  * Description:
  *   Find an entry in the module registry using the name of the module.
  *
  * Input Parameters:
- *   modulename - The name of the module to be found
+ *   modname - The name of the module to be found
  *
  * Returned Value:
  *   If the registry entry is found, a pointer to the module entry is
@@ -499,10 +487,12 @@ int mod_registry_del(FAR struct module_s *modp);
  *
  ****************************************************************************/
 
-FAR struct module_s *mod_registry_find(FAR const char *modulename);
+#ifdef HAVE_MODLIB_NAMES
+FAR struct module_s *modlib_registry_find(FAR const char *modname);
+#endif
 
 /****************************************************************************
- * Name: mod_registry_verify
+ * Name: modlib_registry_verify
  *
  * Description:
  *   Verify that a module handle is valid by traversing the module list and
@@ -520,6 +510,30 @@ FAR struct module_s *mod_registry_find(FAR const char *modulename);
  *
  ****************************************************************************/
 
-int mod_registry_verify(FAR struct module_s *modp);
+int modlib_registry_verify(FAR struct module_s *modp);
 
-#endif /* __SCHED_MODULE_MODULE_H */
+/****************************************************************************
+ * Name: modlib_registry_foreach
+ *
+ * Description:
+ *   Visit each module in the registry.  This is an internal OS interface and
+ *   not available for use by applications.
+ *
+ * Input Parameters:
+ *   callback - This callback function was be called for each entry in the
+ *     registry.
+ *   arg - This opaque argument will be passed to the callback function.
+ *
+ * Returned Value:
+ *   This function normally returns zero (OK).  If, however, any callback
+ *   function returns a non-zero value, the traversal will be terminated and
+ *   that non-zero value will be returned.
+ *
+ * Assumptions:
+ *   The caller does NOT hold the lock on the module registry.
+ *
+ ****************************************************************************/
+
+int modlib_registry_foreach(mod_callback_t callback, FAR void *arg);
+
+#endif /* __INCLUDE_NUTTX_LIB_MODLIB_H */

@@ -1,5 +1,5 @@
 /****************************************************************************
- * sched/module/mod_registry.c
+ * libc/modlib/modlib_registry.c
  *
  *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -45,8 +45,7 @@
 #include <errno.h>
 
 #include <nuttx/module.h>
-
-#include "module.h"
+#include <nuttx/lib/modlib.h>
 
 /****************************************************************************
  * Pre-processor Definitions
@@ -62,7 +61,7 @@ struct mod_registrylock_s
 {
   sem_t lock;         /* The actual registry lock */
   pid_t holder;       /* The PID of the current holder of the lock */
-  int16_t count;      /* The number of nested calls to mod_registry_lock */
+  int16_t count;      /* The number of nested calls to modlib_registry_lock */
 };
 
 /****************************************************************************
@@ -83,7 +82,7 @@ static FAR struct module_s *g_mod_registry;
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mod_registry_lock
+ * Name: modlib_registry_lock
  *
  * Description:
  *   Get exclusive access to the module registry.
@@ -96,7 +95,7 @@ static FAR struct module_s *g_mod_registry;
  *
  ****************************************************************************/
 
-void mod_registry_lock(void)
+void modlib_registry_lock(void)
 {
   pid_t me;
 
@@ -132,7 +131,7 @@ void mod_registry_lock(void)
 }
 
 /****************************************************************************
- * Name: mod_registry_unlock
+ * Name: modlib_registry_unlock
  *
  * Description:
  *   Relinquish the lock on the module registry
@@ -145,7 +144,7 @@ void mod_registry_lock(void)
  *
  ****************************************************************************/
 
-void mod_registry_unlock(void)
+void modlib_registry_unlock(void)
 {
   DEBUGASSERT(g_modlock.holder == getpid());
 
@@ -169,7 +168,7 @@ void mod_registry_unlock(void)
 }
 
 /****************************************************************************
- * Name: mod_registry_add
+ * Name: modlib_registry_add
  *
  * Description:
  *   Add a new entry to the module registry.
@@ -185,7 +184,7 @@ void mod_registry_unlock(void)
  *
  ****************************************************************************/
 
-void mod_registry_add(FAR struct module_s *modp)
+void modlib_registry_add(FAR struct module_s *modp)
 {
   DEBUGASSERT(modp);
   modp->flink = g_mod_registry;
@@ -193,7 +192,7 @@ void mod_registry_add(FAR struct module_s *modp)
 }
 
 /****************************************************************************
- * Name: mod_registry_del
+ * Name: modlib_registry_del
  *
  * Description:
  *   Remove a module entry from the registry
@@ -210,7 +209,7 @@ void mod_registry_add(FAR struct module_s *modp)
  *
  ****************************************************************************/
 
-int mod_registry_del(FAR struct module_s *modp)
+int modlib_registry_del(FAR struct module_s *modp)
 {
   FAR struct module_s *prev;
   FAR struct module_s *curr;
@@ -239,13 +238,13 @@ int mod_registry_del(FAR struct module_s *modp)
 }
 
 /****************************************************************************
- * Name: mod_registry_find
+ * Name: modlib_registry_find
  *
  * Description:
  *   Find an entry in the module registry using the name of the module.
  *
  * Input Parameters:
- *   modulename - The name of the module to be found
+ *   modname - The name of the module to be found
  *
  * Returned Value:
  *   If the registry entry is found, a pointer to the module entry is
@@ -256,19 +255,21 @@ int mod_registry_del(FAR struct module_s *modp)
  *
  ****************************************************************************/
 
-FAR struct module_s *mod_registry_find(FAR const char *modulename)
+#ifdef HAVE_MODLIB_NAMES
+FAR struct module_s *modlib_registry_find(FAR const char *modname)
 {
   FAR struct module_s *modp;
 
   for (modp = g_mod_registry;
-       modp != NULL && strncmp(modp->modulename, modulename, MODULENAME_MAX) != 0;
+       modp != NULL && strncmp(modp->modname, modname, MODLIB_NAMEMAX) != 0;
        modp = modp->flink);
 
   return modp;
 }
+#endif
 
 /****************************************************************************
- * Name: mod_registry_verify
+ * Name: modlib_registry_verify
  *
  * Description:
  *   Verify that a module handle is valid by traversing the module list and
@@ -286,7 +287,7 @@ FAR struct module_s *mod_registry_find(FAR const char *modulename)
  *
  ****************************************************************************/
 
-int mod_registry_verify(FAR struct module_s *modp)
+int modlib_registry_verify(FAR struct module_s *modp)
 {
   FAR struct module_s *node;
 
@@ -302,7 +303,7 @@ int mod_registry_verify(FAR struct module_s *modp)
 }
 
 /****************************************************************************
- * Name: mod_registry_foreach
+ * Name: modlib_registry_foreach
  *
  * Description:
  *   Visit each module in the registry
@@ -319,14 +320,14 @@ int mod_registry_verify(FAR struct module_s *modp)
  *
  ****************************************************************************/
 
-int mod_registry_foreach(mod_callback_t callback, FAR void *arg)
+int modlib_registry_foreach(mod_callback_t callback, FAR void *arg)
 {
   FAR struct module_s *modp;
   int ret = OK;
 
   /* Get exclusive access to the module registry */
 
-  mod_registry_lock();
+  modlib_registry_lock();
 
   /* Visit each installed module */
 
@@ -341,6 +342,6 @@ int mod_registry_foreach(mod_callback_t callback, FAR void *arg)
         }
     }
 
-  mod_registry_unlock();
+  modlib_registry_unlock();
   return ret;
 }

@@ -1,5 +1,5 @@
 /****************************************************************************
- * sched/module/mod_bind.c
+ * libc/modlib/modlib_bind.c
  *
  *   Copyright (C) 2015, 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -47,25 +47,26 @@
 #include <debug.h>
 
 #include <nuttx/module.h>
+#include <nuttx/lib/modlib.h>
 #include <nuttx/binfmt/symtab.h>
 
-#include "module.h"
+#include "modlib/modlib.h"
 
 /****************************************************************************
  * Private Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mod_readrel
+ * Name: modlib_readrel
  *
  * Description:
  *   Read the ELF32_Rel structure into memory.
  *
  ****************************************************************************/
 
-static inline int mod_readrel(FAR struct mod_loadinfo_s *loadinfo,
-                              FAR const Elf32_Shdr *relsec,
-                              int index, FAR Elf32_Rel *rel)
+static inline int modlib_readrel(FAR struct mod_loadinfo_s *loadinfo,
+                                 FAR const Elf32_Shdr *relsec,
+                                 int index, FAR Elf32_Rel *rel)
 {
   off_t offset;
 
@@ -83,11 +84,11 @@ static inline int mod_readrel(FAR struct mod_loadinfo_s *loadinfo,
 
   /* And, finally, read the symbol table entry into memory */
 
-  return mod_read(loadinfo, (FAR uint8_t *)rel, sizeof(Elf32_Rel), offset);
+  return modlib_read(loadinfo, (FAR uint8_t *)rel, sizeof(Elf32_Rel), offset);
 }
 
 /****************************************************************************
- * Name: mod_relocate and mod_relocateadd
+ * Name: modlib_relocate and modlib_relocateadd
  *
  * Description:
  *   Perform all relocations associated with a section.
@@ -98,8 +99,8 @@ static inline int mod_readrel(FAR struct mod_loadinfo_s *loadinfo,
  *
  ****************************************************************************/
 
-static int mod_relocate(FAR struct module_s *modp,
-                        FAR struct mod_loadinfo_s *loadinfo, int relidx)
+static int modlib_relocate(FAR struct module_s *modp,
+                           FAR struct mod_loadinfo_s *loadinfo, int relidx)
 
 {
   FAR Elf32_Shdr *relsec = &loadinfo->shdr[relidx];
@@ -123,7 +124,7 @@ static int mod_relocate(FAR struct module_s *modp,
 
       /* Read the relocation entry into memory */
 
-      ret = mod_readrel(loadinfo, relsec, i, &rel);
+      ret = modlib_readrel(loadinfo, relsec, i, &rel);
       if (ret < 0)
         {
           serr("ERROR: Section %d reloc %d: Failed to read relocation entry: %d\n",
@@ -139,7 +140,7 @@ static int mod_relocate(FAR struct module_s *modp,
 
       /* Read the symbol table entry into memory */
 
-      ret = mod_readsym(loadinfo, symidx, &sym);
+      ret = modlib_readsym(loadinfo, symidx, &sym);
       if (ret < 0)
         {
           serr("ERROR: Section %d reloc %d: Failed to read symbol[%d]: %d\n",
@@ -149,7 +150,7 @@ static int mod_relocate(FAR struct module_s *modp,
 
       /* Get the value of the symbol (in sym.st_value) */
 
-      ret = mod_symvalue(modp, loadinfo, &sym);
+      ret = modlib_symvalue(modp, loadinfo, &sym);
       if (ret < 0)
         {
           /* The special error -ESRCH is returned only in one condition:  The
@@ -200,7 +201,7 @@ static int mod_relocate(FAR struct module_s *modp,
   return OK;
 }
 
-static int mod_relocateadd(FAR struct module_s *modp,
+static int modlib_relocateadd(FAR struct module_s *modp,
                            FAR struct mod_loadinfo_s *loadinfo, int relidx)
 {
   serr("ERROR: Not implemented\n");
@@ -212,11 +213,11 @@ static int mod_relocateadd(FAR struct module_s *modp,
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mod_bind
+ * Name: modlib_bind
  *
  * Description:
  *   Bind the imported symbol names in the loaded module described by
- *   'loadinfo' using the exported symbol values provided by mod_setsymtab().
+ *   'loadinfo' using the exported symbol values provided by modlib_setsymtab().
  *
  * Input Parameters:
  *   modp     - Module state information
@@ -228,14 +229,14 @@ static int mod_relocateadd(FAR struct module_s *modp,
  *
  ****************************************************************************/
 
-int mod_bind(FAR struct module_s *modp, FAR struct mod_loadinfo_s *loadinfo)
+int modlib_bind(FAR struct module_s *modp, FAR struct mod_loadinfo_s *loadinfo)
 {
   int ret;
   int i;
 
   /* Find the symbol and string tables */
 
-  ret = mod_findsymtab(loadinfo);
+  ret = modlib_findsymtab(loadinfo);
   if (ret < 0)
     {
       return ret;
@@ -245,10 +246,10 @@ int mod_bind(FAR struct module_s *modp, FAR struct mod_loadinfo_s *loadinfo)
    * accumulate the variable length symbol name.
    */
 
-  ret = mod_allocbuffer(loadinfo);
+  ret = modlib_allocbuffer(loadinfo);
   if (ret < 0)
     {
-      serr("ERROR: mod_allocbuffer failed: %d\n", ret);
+      serr("ERROR: modlib_allocbuffer failed: %d\n", ret);
       return -ENOMEM;
     }
 
@@ -277,11 +278,11 @@ int mod_bind(FAR struct module_s *modp, FAR struct mod_loadinfo_s *loadinfo)
 
       if (loadinfo->shdr[i].sh_type == SHT_REL)
         {
-          ret = mod_relocate(modp, loadinfo, i);
+          ret = modlib_relocate(modp, loadinfo, i);
         }
       else if (loadinfo->shdr[i].sh_type == SHT_RELA)
         {
-          ret = mod_relocateadd(modp, loadinfo, i);
+          ret = modlib_relocateadd(modp, loadinfo, i);
         }
 
       if (ret < 0)

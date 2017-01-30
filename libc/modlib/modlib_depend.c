@@ -1,5 +1,5 @@
 /****************************************************************************
- * sched/module/mod_depend.c
+ * libc/modlib/modlib_depend.c
  *
  *   Copyright (C) 2017 Gregory Nutt. All rights reserved.
  *   Author: Gregory Nutt <gnutt@nuttx.org>
@@ -43,17 +43,15 @@
 #include <errno.h>
 #include <debug.h>
 
-#include <nuttx/kmalloc.h>
 #include <nuttx/module.h>
-
-#include "module.h"
+#include <nuttx/lib/modlib.h>
 
 /****************************************************************************
  * Public Functions
  ****************************************************************************/
 
 /****************************************************************************
- * Name: mod_depend
+ * Name: modlib_depend
  *
  * Description:
  *   Set up module dependencies between the exporter and the importer of a
@@ -69,9 +67,9 @@
  *
  ****************************************************************************/
 
-int mod_depend(FAR struct module_s *importer, FAR struct module_s *exporter)
+int modlib_depend(FAR struct module_s *importer, FAR struct module_s *exporter)
 {
-#if CONFIG_MODULE_MAXDEPEND > 0
+#if CONFIG_MODLIB_MAXDEPEND > 0
   int freendx;
   int i;
 
@@ -83,11 +81,11 @@ int mod_depend(FAR struct module_s *importer, FAR struct module_s *exporter)
    * list of dependencies.
    *
    * The list dependency list is a a dumb, upacked array of pointers.  This
-   * should not be too inefficient if the number of CONFIG_MODULE_MAXDEPEND
+   * should not be too inefficient if the number of CONFIG_MODLIB_MAXDEPEND
    * is small.  Otherwise, a more dynamic data structure would be in order.
    */
 
-  for (i = 0, freendx = -1; i < CONFIG_MODULE_MAXDEPEND; i++)
+  for (i = 0, freendx = -1; i < CONFIG_MODLIB_MAXDEPEND; i++)
     {
       FAR const struct module_s *modp;
 
@@ -150,7 +148,7 @@ int mod_depend(FAR struct module_s *importer, FAR struct module_s *exporter)
 }
 
 /****************************************************************************
- * Name: mod_undepend
+ * Name: modlib_undepend
  *
  * Description:
  *   Tear down module dependencies between the exporters and the importer of
@@ -166,9 +164,9 @@ int mod_depend(FAR struct module_s *importer, FAR struct module_s *exporter)
  *
  ****************************************************************************/
 
-int mod_undepend(FAR struct module_s *importer)
+int modlib_undepend(FAR struct module_s *importer)
 {
-#if CONFIG_MODULE_MAXDEPEND > 0
+#if CONFIG_MODLIB_MAXDEPEND > 0
   FAR struct module_s *exporter;
   int i;
 
@@ -176,11 +174,11 @@ int mod_undepend(FAR struct module_s *importer)
 
   /* Decrement the dependency count on each of exporters of symbols used by
    * this importer module.  This is an upacked array of pointers.  This
-   * should not be too inefficient if the number of CONFIG_MODULE_MAXDEPEND
+   * should not be too inefficient if the number of CONFIG_MODLIB_MAXDEPEND
    * is small.  Otherwise, a more dynamic data structure would be in order.
    */
 
-  for (i = 0; i < CONFIG_MODULE_MAXDEPEND; i++)
+  for (i = 0; i < CONFIG_MODLIB_MAXDEPEND; i++)
     {
       exporter = importer->dependencies[i];
       if (exporter != NULL)
