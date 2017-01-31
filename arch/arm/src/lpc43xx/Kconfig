@@ -498,9 +498,10 @@ if LPC43_SDMMC
 menu "SDIO Configuration"
 	depends on LPC43_SDMMC
 
-config SDIO_DMA
+config LPC43_SDMMC_DMA
 	bool "Support DMA data transfers"
 	default y
+	select SDIO_DMA
 	select SDIO_SETUP_DMA_BEFORE_WRITE
 	---help---
 		Support DMA data transfers.

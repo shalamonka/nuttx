@@ -93,7 +93,7 @@
  *   CONFIG_SDIO_MUXBUS - Setting this configuration enables some locking
  *     APIs to manage concurrent accesses on the SD card bus.  This is not
  *     needed for the simple case of a single SD card, for example.
- *   CONFIG_SDIO_DMA - Enable SD card DMA.  This is a marginally optional.
+ *   CONFIG_LPC43_SDMMC_DMA - Enable SD card DMA.  This is a marginally optional.
  *     For most usages, SD accesses will cause data overruns if used without DMA.
  *     NOTE the above system DMA configuration options.
  *   CONFIG_LPC43_SDMMC_WITH_D1_ONLY - This may be selected to force the
@@ -105,6 +105,12 @@
 
 #ifndef CONFIG_SCHED_WORKQUEUE
 #  error "Callback support requires CONFIG_SCHED_WORKQUEUE"
+#endif
+
+#if !defined(CONFIG_LPC43_SDMMC_DMA)
+#  warning "Large Non-DMA transfer may result in RX overrun failures"
+#elif !defined(CONFIG_SDIO_DMA)
+#  error CONFIG_SDIO_DMA must be defined with CONFIG_LPC43_SDMMC_DMA
 #endif
 
 /* Clock Division */
@@ -215,7 +221,7 @@ struct lpc43_dev_s
   /* DMA data transfer support */
 
   bool               widebus;    /* Required for DMA support */
-#ifdef CONFIG_SDIO_DMA
+#ifdef CONFIG_LPC43_SDMMC_DMA
   bool               dmamode;    /* true: DMA mode transfer */
 #endif
 };
@@ -327,7 +333,7 @@ static int  lpc43_registercallback(FAR struct sdio_dev_s *dev,
 
 /* DMA */
 
-#ifdef CONFIG_SDIO_DMA
+#ifdef CONFIG_LPC43_SDMMC_DMA
 static int  lpc43_dmarecvsetup(FAR struct sdio_dev_s *dev,
               FAR uint8_t *buffer, size_t buflen);
 static int  lpc43_dmasendsetup(FAR struct sdio_dev_s *dev,
@@ -1138,7 +1144,7 @@ static void lpc43_reset(FAR struct sdio_dev_s *dev)
 
   regval = 0;
 
-#ifdef CONFIG_SDIO_DMA
+#ifdef CONFIG_LPC43_SDMMC_DMA
   priv->dmamode    = false;  /* true: DMA mode transfer */
 
   /* Use the Internal DMA */
@@ -1202,7 +1208,7 @@ static sdio_capset_t lpc43_capabilities(FAR struct sdio_dev_s *dev)
 #ifdef CONFIG_LPC43_SDMMC_WITH_D1_ONLY
   caps |= SDIO_CAPS_1BIT_ONLY;
 #else
-#ifdef CONFIG_SDIO_DMA
+#ifdef CONFIG_LPC43_SDMMC_DMA
   caps |= SDIO_CAPS_DMASUPPORTED;
 #endif
 
@@ -1506,7 +1512,7 @@ static int lpc43_recvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
 
   priv->buffer    = (uint32_t *)buffer;
   priv->remaining = nbytes;
-#ifdef CONFIG_SDIO_DMA
+#ifdef CONFIG_LPC43_SDMMC_DMA
   priv->dmamode   = false;
 #endif
 
@@ -1559,7 +1565,7 @@ static int lpc43_sendsetup(FAR struct sdio_dev_s *dev, FAR const uint8_t *buffer
 
   priv->buffer    = (uint32_t *)buffer;
   priv->remaining = nbytes;
-#ifdef CONFIG_SDIO_DMA
+#ifdef CONFIG_LPC43_SDMMC_DMA
   priv->dmamode   = false;
 #endif
 
@@ -1606,7 +1612,7 @@ static int lpc43_cancel(FAR struct sdio_dev_s *dev)
 
   /* If this was a DMA transfer, make sure that DMA is stopped */
 
-#ifdef CONFIG_SDIO_DMA
+#ifdef CONFIG_LPC43_SDMMC_DMA
   if (priv->dmamode)
     {
       /* Make sure that the DMA is stopped (it will be stopped automatically
@@ -2194,7 +2200,7 @@ static int lpc43_registercallback(FAR struct sdio_dev_s *dev,
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SDIO_DMA
+#ifdef CONFIG_LPC43_SDMMC_DMA
 static int lpc43_dmarecvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
                               size_t buflen)
 {
@@ -2257,7 +2263,7 @@ static int lpc43_dmarecvsetup(FAR struct sdio_dev_s *dev, FAR uint8_t *buffer,
  *
  ****************************************************************************/
 
-#ifdef CONFIG_SDIO_DMA
+#ifdef CONFIG_LPC43_SDMMC_DMA
 static int lpc43_dmasendsetup(FAR struct sdio_dev_s *dev,
                               FAR const uint8_t *buffer, size_t buflen)
 {
