@@ -1207,10 +1207,11 @@ static sdio_capset_t lpc43_capabilities(FAR struct sdio_dev_s *dev)
 
 #ifdef CONFIG_LPC43_SDMMC_WITH_D1_ONLY
   caps |= SDIO_CAPS_1BIT_ONLY;
-#else
+#endif
 #ifdef CONFIG_LPC43_SDMMC_DMA
   caps |= SDIO_CAPS_DMASUPPORTED;
 #endif
+  caps |= SDIO_CAPS_DMABEFOREWRITE;
 
   return caps;
 }
