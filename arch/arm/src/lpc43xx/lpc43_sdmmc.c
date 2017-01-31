@@ -96,9 +96,9 @@
  *   CONFIG_SDIO_DMA - Enable SD card DMA.  This is a marginally optional.
  *     For most usages, SD accesses will cause data overruns if used without DMA.
  *     NOTE the above system DMA configuration options.
- *   CONFIG_SDIO_WIDTH_D1_ONLY - This may be selected to force the driver
- *     operate with only a single data line (the default is to use all
- *     4 SD data lines).
+ *   CONFIG_LPC43_SDMMC_WITH_D1_ONLY - This may be selected to force the
+ *     driver operate with only a single data line (the default is to use
+ *     all 4 SD data lines).
  *   CONFIG_DEBUG_MEMCARD_* - Enables some very low-level debug output
  *     This also requires CONFIG_DEBUG_FS and CONFIG_DEBUG_INFO
  */
@@ -287,6 +287,7 @@ static int  lpc43_lock(FAR struct sdio_dev_s *dev, bool lock);
 /* Initialization/setup */
 
 static void lpc43_reset(FAR struct sdio_dev_s *dev);
+static sdio_capset_t lpc43_capabilities(FAR struct sdio_dev_s *dev);
 static uint8_t lpc43_status(FAR struct sdio_dev_s *dev);
 static void lpc43_widebus(FAR struct sdio_dev_s *dev, bool enable);
 static void lpc43_clock(FAR struct sdio_dev_s *dev,
@@ -327,7 +328,6 @@ static int  lpc43_registercallback(FAR struct sdio_dev_s *dev,
 /* DMA */
 
 #ifdef CONFIG_SDIO_DMA
-static bool lpc43_dmasupported(FAR struct sdio_dev_s *dev);
 static int  lpc43_dmarecvsetup(FAR struct sdio_dev_s *dev,
               FAR uint8_t *buffer, size_t buflen);
 static int  lpc43_dmasendsetup(FAR struct sdio_dev_s *dev,
@@ -459,6 +459,7 @@ struct lpc43_dev_s g_scard_dev =
     .lock             = lpc43_lock,
 #endif
     .reset            = lpc43_reset,
+    .capabilities     = lpc43_capabilities,
     .status           = lpc43_status,
     .widebus          = lpc43_widebus,
     .clock            = lpc43_clock,
@@ -480,7 +481,6 @@ struct lpc43_dev_s g_scard_dev =
     .callbackenable   = lpc43_callbackenable,
     .registercallback = lpc43_registercallback,
 #ifdef CONFIG_SDIO_DMA
-    .dmasupported     = lpc43_dmasupported,
     .dmarecvsetup     = lpc43_dmarecvsetup,
     .dmasendsetup     = lpc43_dmasendsetup,
 #endif
@@ -1182,6 +1182,34 @@ static void lpc43_reset(FAR struct sdio_dev_s *dev)
 }
 
 /****************************************************************************
+ * Name: lpc43_capabilities
+ *
+ * Description:
+ *   Get capabilities (and limitations) of the SDIO driver (optional)
+ *
+ * Input Parameters:
+ *   dev   - Device-specific state data
+ *
+ * Returned Value:
+ *   Returns a bitset of status values (see SDIO_CAPS_* defines)
+ *
+ ****************************************************************************/
+
+static sdio_capset_t lpc43_capabilities(FAR struct sdio_dev_s *dev)
+{
+  sdio_capset_t caps = 0;
+
+#ifdef CONFIG_LPC43_SDMMC_WITH_D1_ONLY
+  caps |= SDIO_CAPS_1BIT_ONLY;
+#else
+#ifdef CONFIG_SDIO_DMA
+  caps |= SDIO_CAPS_DMASUPPORTED;
+#endif
+
+  return caps;
+}
+
+/****************************************************************************
  * Name: lpc43_status
  *
  * Description:
@@ -1282,7 +1310,7 @@ static void lpc43_clock(FAR struct sdio_dev_s *dev, enum sdio_clock_e rate)
       /* SD normal operation clocking (wide 4-bit mode) */
 
       case CLOCK_SD_TRANSFER_4BIT:
-#ifndef CONFIG_SDIO_WIDTH_D1_ONLY
+#ifndef CONFIG_LPC43_SDMMC_WITH_D1_ONLY
         clkdiv = SDCARD_CLOCK_SDWIDEXFR;
         ctype  = SDCARD_BUS_D4;
         enabled = true;
@@ -2148,27 +2176,6 @@ static int lpc43_registercallback(FAR struct sdio_dev_s *dev,
 }
 
 /****************************************************************************
- * Name: lpc43_dmasupported
- *
- * Description:
- *   Return true if the hardware can support DMA
- *
- * Input Parameters:
- *   dev - An instance of the SD card device interface
- *
- * Returned Value:
- *   true if DMA is supported.
- *
- ****************************************************************************/
-
-#ifdef CONFIG_SDIO_DMA
-static bool lpc43_dmasupported(FAR struct sdio_dev_s *dev)
-{
-  return true;
-}
-#endif
-
-/****************************************************************************
  * Name: lpc43_dmarecvsetup
  *
  * Description:
@@ -2435,7 +2442,7 @@ FAR struct sdio_dev_s *sdio_initialize(int slotno)
   /* Configure GPIOs for 4-bit, wide-bus operation */
 
   lpc43_pin_config(PINCONF_SD_DAT0_1);
-#ifndef CONFIG_SDIO_WIDTH_D1_ONLY
+#ifndef CONFIG_LPC43_SDMMC_WITH_D1_ONLY
   lpc43_pin_config(PINCONF_SD_DAT1_1);
   lpc43_pin_config(PINCONF_SD_DAT2_1);
   lpc43_pin_config(PINCONF_SD_DAT3_1);
