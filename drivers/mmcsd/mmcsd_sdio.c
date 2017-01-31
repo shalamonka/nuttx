@@ -1694,6 +1694,21 @@ static ssize_t mmcsd_writesingle(FAR struct mmcsd_state_s *priv,
       return ret;
     }
 
+  /* If Controller doesn't need DMA before Write then send CMD */
+
+  if ((priv->caps & SDIO_CAPS_DMABEFOREWRITE) == 0)
+    {
+      /* Send CMD24, WRITE_BLOCK, and verify that good R1 status is returned */
+
+      mmcsd_sendcmdpoll(priv, MMCSD_CMD24, offset);
+      ret = mmcsd_recvR1(priv, MMCSD_CMD24);
+      if (ret != OK)
+        {
+          ferr("ERROR: mmcsd_recvR1 for CMD24 failed: %d\n", ret);
+          return ret;
+        }
+    }
+
   /* Configure SDIO controller hardware for the write transfer */
 
   SDIO_BLOCKSETUP(priv->dev, priv->blocksize, 1);
@@ -1722,14 +1737,19 @@ static ssize_t mmcsd_writesingle(FAR struct mmcsd_state_s *priv,
 
   priv->wrbusy = true;
 
-  /* Send CMD24, WRITE_BLOCK, and verify that good R1 status is returned */
+  /* If Controller needs DMA before Write then only send CMD now */
 
-  mmcsd_sendcmdpoll(priv, MMCSD_CMD24, offset);
-  ret = mmcsd_recvR1(priv, MMCSD_CMD24);
-  if (ret != OK)
+  if ((priv->caps & SDIO_CAPS_DMABEFOREWRITE) != 0)
     {
-      ferr("ERROR: mmcsd_recvR1 for CMD24 failed: %d\n", ret);
-      return ret;
+      /* Send CMD24, WRITE_BLOCK, and verify that good R1 status is returned */
+
+      mmcsd_sendcmdpoll(priv, MMCSD_CMD24, offset);
+      ret = mmcsd_recvR1(priv, MMCSD_CMD24);
+      if (ret != OK)
+        {
+          ferr("ERROR: mmcsd_recvR1 for CMD24 failed: %d\n", ret);
+          return ret;
+        }
     }
 
   /* Wait for the transfer to complete */
